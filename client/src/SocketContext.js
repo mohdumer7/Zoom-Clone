@@ -13,8 +13,11 @@ const ContextProvider = ({ children }) => {
   const [call, setCall] = useState("");
   const [callAccepted, setCallAccepted] = useState(false);
   const [callEnded, setCallEnded] = useState(false);
+  const [name, setName] = useState("");
 
   const myVideo = useRef();
+  const userVideo = useRef();
+  const connectionRef = useRef();
 
   useEffect(() => {
     navigator.mediaDevices
@@ -36,11 +39,64 @@ const ContextProvider = ({ children }) => {
     setCallAccepted(true);
     const peer = new Peer({ initiator: false, trickle: false, stream });
     peer.on("signal", (data) => {
-      socket.emit("answercall", { signa: data, to: call.from });
+      socket.emit("answercall", { signal: data, to: call.from });
     });
+
+    peer.on("stream", (currentStream) => {
+      userVideo.current.srcObject = currentStream;
+    });
+    peer.signal(call.signal);
+    connectionRef.current = peer;
   };
 
-  const callUser = () => {};
+  const callUser = (id) => {
+    const peer = new Peer({ initiator: true, trickle: false, stream });
+    peer.on("signal", (data) => {
+      socket.emit("calluser", {
+        userToCall: id,
+        signalData: data,
+        from: me,
+        name,
+      });
+    });
 
-  const leaveCall = () => {};
+    peer.on("stream", (currentStream) => {
+      userVideo.current.srcObject = currentStream;
+    });
+
+    socket.on("callaccepted", (signal) => {
+      setCallAccepted(true);
+      peer.signal(signal);
+    });
+    connectionRef.current = peer;
+  };
+
+  const leaveCall = () => {
+    setCallEnded(true);
+    connectionRef.current.destroy();
+    window.location.reload();
+  };
+
+  return (
+    <SocketContext.Provider
+      value={{
+        call,
+        callAccepted,
+        myVideo,
+        userVideo,
+        stream,
+        name,
+        callEnded,
+        me,
+        callUser,
+        setName,
+        leaveCall,
+        answercall,
+      }}
+    >
+      {children}
+    </SocketContext.Provider>
+  );
 };
+
+export { ContextProvider, SocketContext };
